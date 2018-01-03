@@ -16,7 +16,7 @@
 #include "omp.h"
 
 #define NR_RNDNUM 365
-#define NUM_BINS 25 
+#define NUM_BINS 25
 #define NUM_THREADS 8
 #define quick_and_dirty_rand() rand()/double(RAND_MAX)
 
@@ -43,10 +43,10 @@ int measurements;
 int istart;
 double beta;
 double inv_beta;
-double weight[5];               
+double weight[5];
 double volume;
 double *magn, *energy;
-std::ofstream outfile("measures.dat", std::ios_base::app); 
+std::ofstream outfile("measures.dat", std::ios_base::app);
 
 /** Necessary for GCC versions available in labs */
 double tmp_accum_1, tmp_accum_2;
@@ -55,7 +55,7 @@ double tmp_accum_1, tmp_accum_2;
 
 int main(int argc, char** argv)
 {
-    unsigned int randomseed = 1812; 
+    unsigned int randomseed = 1812;
     double avg_energy = 0, err_energy = 0;
     double avg_magn = 0, err_magn = 0;
     struct timespec start, finish;
@@ -77,24 +77,23 @@ int main(int argc, char** argv)
     inv_beta = 1.0 / beta;
 
     /** Pre-threaded sanity checks */
-    if ((measurements / NUM_BINS * NUM_BINS) != measurements)
-    {
+    if ((measurements / NUM_BINS * NUM_BINS) != measurements) {
         std::cout << "Error: the number of measurements must be divisible by NUM_BINS" << std::endl;
         std::cout << "We have NUM_BINS = " << NUM_BINS <<  " and " << measurements  << " requested measurements" << std::endl;
         exit(EXIT_FAILURE);
     }
 
-	if(size & 1)
-	{
-		printf("Size must be even for chessboard dependency purposes.\n  Size:\t%d\n", size);
-		exit(EXIT_FAILURE);
-	}
+    if(size & 1) {
+        printf("Size must be even for chessboard dependency purposes.\n  Size:\t%d\n", size);
+        exit(EXIT_FAILURE);
+    }
 
     /** Initialisation of observables */
     energy = new double [measurements]();
     magn = new double [measurements]();
     volume = static_cast<double>(size) * static_cast<double>(size);
     spin = new int* [size];
+
     for(int i = 0; i < size; i++)
         spin[i] = new int [size];
 
@@ -104,47 +103,44 @@ int main(int argc, char** argv)
     initweight();
 
 #pragma omp parallel default(shared)
-{
-    if(NUM_THREADS != omp_get_num_threads())
     {
-        printf("Thread creation issue.\n  #Threads requested:\t%d\n"
-                "  #Threads spawned:\t%d\n", NUM_THREADS, omp_get_num_threads());
-        exit(EXIT_FAILURE);
-    }
+        if(NUM_THREADS != omp_get_num_threads()) {
+            printf("Thread creation issue.\n  #Threads requested:\t%d\n"
+                   "  #Threads spawned:\t%d\n", NUM_THREADS, omp_get_num_threads());
+            exit(EXIT_FAILURE);
+        }
 
-    int thread_num = omp_get_thread_num();
-    int ind_seed = ran_arr[thread_num];
-    int icall = 0;
-    int iv[NR_RNDNUM] = {0};
+        int thread_num = omp_get_thread_num();
+        int ind_seed = ran_arr[thread_num];
+        int icall = 0;
+        int iv[NR_RNDNUM] = {0};
 
 #pragma omp single
-    chunk_width = size / NUM_THREADS;
+        chunk_width = size / NUM_THREADS;
 
-    if(chunk_width * NUM_THREADS != size)
-    {
-        printf("Number of threads (%d) must divide into lattice width (%d).\n", NUM_THREADS, size);
-        exit(EXIT_FAILURE);
+        if(chunk_width * NUM_THREADS != size) {
+            printf("Number of threads (%d) must divide into lattice width (%d).\n", NUM_THREADS, size);
+            exit(EXIT_FAILURE);
+        }
+
+        /** Initialise rndnum() per-thread */
+        rini(ind_seed, iv);
+        init_spin(chunk_width, &icall, iv);
+
+        /** Thermalisaion */
+        for(int i = 0; i < thermalisation; i++)
+            do_update(chunk_width, &icall, iv);
+
+        /** Measurements */
+        for(int i = 0; i < measurements; i++) {
+            do_update(chunk_width, &icall, iv);
+            do_measurements(i, chunk_width);
+        }
+
+        /** Jackknife error calculations */
+        jack_error(energy, &avg_energy, &err_energy);
+        jack_error(magn, &avg_magn, &err_magn);
     }
-
-    /** Initialise rndnum() per-thread */
-    rini(ind_seed, iv);
-    init_spin(chunk_width, &icall, iv);
-
-    /** Thermalisaion */
-    for(int i = 0; i < thermalisation; i++)
-        do_update(chunk_width, &icall, iv);
-
-    /** Measurements */
-    for(int i = 0; i < measurements; i++)
-    {
-        do_update(chunk_width, &icall, iv);
-        do_measurements(i, chunk_width);
-    }
-
-    /** Jackknife error calculations */
-    jack_error(energy, &avg_energy, &err_energy);
-    jack_error(magn, &avg_magn, &err_magn);
-}
 
     /** Finish clock and calc elapsed time*/
     clock_gettime(CLOCK_MONOTONIC, &finish);
@@ -160,8 +156,10 @@ int main(int argc, char** argv)
     /** Free memory */
     delete[] energy;
     delete[] magn;
-    for(int i =0; i < size; i++)
+
+    for(int i = 0; i < size; i++)
         delete[] spin[i];
+
     delete[] spin;
 
     return 0;
@@ -179,6 +177,7 @@ void do_update(int chunk_width, int* icall, int* iv)
 
     /** Black squares */
 #pragma omp for collapse(2) schedule(static, chunk_width)
+
     for (int i = 0; i < size; i++)
         for (int j = !(i & 1); j < size; j += 2 )
             spin[i][j] =  Heatbath(i, j, icall, iv);
@@ -189,12 +188,12 @@ void do_update(int chunk_width, int* icall, int* iv)
 void do_measurements(int k, int chunk_width)
 {
 #pragma omp single
-    tmp_accum_1 = tmp_accum_2 = 0.;        
+    tmp_accum_1 = tmp_accum_2 = 0.;
 
 #pragma omp for collapse(2) schedule(static, chunk_width) reduction(+: tmp_accum_1, tmp_accum_2)
+
     for (int i = 0; i < size; i++)
-        for (int j = 0; j < size; j ++ )
-        {
+        for (int j = 0; j < size; j ++ ) {
             int ifor = (i + 1) % size;
             int jfor = (j + 1) % size;
             tmp_accum_1 += spin[i][j];
@@ -212,17 +211,19 @@ void do_measurements(int k, int chunk_width)
 
 void init_spin(int chunk_width, int* icall, int* iv)
 {
-#pragma omp for collapse(2) schedule(static, chunk_width) 
+#pragma omp for collapse(2) schedule(static, chunk_width)
+
     for(int i = 0; i < size; i++)
         for(int j = 0; j < size; j++)
-            switch (istart)
-            {
+            switch (istart) {
             case 0:
                 spin[i][j] = 1;
                 break;
+
             case 1:
                 spin[i][j] = rndnum(icall, iv) < 0.5 ? 1 : -1;
                 break;
+
             default:
                 std::cout << "Unknown initialisation parameter" << std::endl;
                 exit(EXIT_FAILURE);
@@ -242,18 +243,19 @@ void jack_error(double *obs, double *avg, double *err)
     tmp_accum_1 = 0.;
 
 #pragma omp for schedule(static) reduction(+: tmp_accum_1)
+
     for (int l = 0; l < measurements; l++)
         tmp_accum_1 += obs[l];
 
 #pragma omp single
-{
-    *avg = tmp_accum_1 / measurements;
-    tmp_accum_1 = 0;
-}
+    {
+        *avg = tmp_accum_1 / measurements;
+        tmp_accum_1 = 0;
+    }
 
 #pragma omp for schedule(static) reduction(+: tmp_accum_1)
-    for (int l = 0; l < NUM_BINS; l++)
-    {
+
+    for (int l = 0; l < NUM_BINS; l++) {
         for (int k = 0; k < slice; k++)
             bin[l] += obs[l * slice + k];
 
@@ -261,23 +263,23 @@ void jack_error(double *obs, double *avg, double *err)
         tmp_accum_1 += bin[l];
     }
 
-	sumbins = tmp_accum_1;
+    sumbins = tmp_accum_1;
 
 #pragma omp single
     tmp_accum_1 = 0;
 
 #pragma omp for schedule(static) reduction(+: tmp_accum_1)
-    for (int l = 0; l < NUM_BINS; l++)
-	{
+
+    for (int l = 0; l < NUM_BINS; l++) {
         jackbins[l] = (sumbins - bin[l]) / (NUM_BINS - 1);
         tmp_accum_1 += (*avg - jackbins[l]) * (*avg - jackbins[l]);
-	}
+    }
 
 #pragma omp single
-{
-    *err = tmp_accum_1 * ((static_cast<double>(NUM_BINS - 1)) / static_cast<double>(NUM_BINS));
-    *err = sqrt(*err);
-}
+    {
+        *err = tmp_accum_1 * ((static_cast<double>(NUM_BINS - 1)) / static_cast<double>(NUM_BINS));
+        *err = sqrt(*err);
+    }
 
     delete[] bin;
     delete[] jackbins;
@@ -316,8 +318,7 @@ int Heatbath(int i, int j, int* icall, int* iv)
 
 void initweight ()
 {
-    for(int i = 0; i < 5; i++)
-    {
+    for(int i = 0; i < 5; i++) {
         int j = 2 * (i - 2);
         weight[i] = 1.0 / (1.0 + exp(2 * j * beta));
     }
@@ -341,15 +342,12 @@ double rndnum(int* icall_o, int* iv)
 
     int icall = *icall_o;
 
-    if (icall == ikeep)
-    {
-        for(int i = 1; i <= ithrow; i++)
-        {
+    if (icall == ikeep) {
+        for(int i = 1; i <= ithrow; i++) {
             ivn = iv[irs + icall] - iv[icall];
             icall++;
 
-            if (ivn < 0)
-            {
+            if (ivn < 0) {
                 iv[icall]++;
                 ivn = ivn + ibase;
             }
@@ -366,8 +364,7 @@ double rndnum(int* icall_o, int* iv)
     ivn = iv[irs + icall] - iv[icall];
     icall++;
 
-    if (ivn < 0)
-    {
+    if (ivn < 0) {
         iv[icall]++;
         ivn = ivn + ibase;
     }
@@ -403,8 +400,7 @@ void rini(int iran, int* iv)
 
     ifac = (ibase - 1) / im;
 
-    for(int i = 0; i < ir; i++)
-    {
+    for(int i = 0; i < ir; i++) {
         jran = (jran * ia + ic) % im;
         iv[i] = ifac * jran;
     }
@@ -420,8 +416,7 @@ void read_input()
     std::cin >> measurements;
     std::cin >> istart;
 
-    if ( (istart != 1) && (istart != 0) )
-    {
+    if ( (istart != 1) && (istart != 0) ) {
         std::cout << "Error: istart can only be either 0 (cold) or 1 (hot)" << std::endl;
         exit(EXIT_FAILURE);
     }
@@ -437,12 +432,9 @@ void print_log()
     std::cout << "Thermalisation sweeps: " << thermalisation << std::endl;
     std::cout << "Number of measurements: " << measurements << std::endl;
 
-    if (istart == 1)
-    {
+    if (istart == 1) {
         std::cout << "Start: hot" << std::endl;
-    }
-    else
-    {
+    } else {
         std::cout << "Start: cold" << std::endl;
     }
 }

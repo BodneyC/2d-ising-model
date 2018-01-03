@@ -6,7 +6,7 @@
  *
  * Compilation: mpic++ -g -[fq]openmp -O3 -o mpi_ising mpi_ising.C
  *
- * Author: Original - Biagio Lucini 
+ * Author: Original - Biagio Lucini
  *         Optimised - Benjamin Carrington
  *
  *******************************************************************/
@@ -75,8 +75,7 @@ int main(int argc, char *argv[])
     omp_set_num_threads(NUM_THREADS);
 
     /** stdin and log */
-    if(proc_id == 0)
-    {
+    if(proc_id == 0) {
         read_input();
         print_log();
     }
@@ -101,6 +100,7 @@ int main(int argc, char *argv[])
     up_id = (proc_id + 1) % num_procs; // Up rankID
     dn_id = (proc_id + num_procs - 1) % num_procs; // down rankID
     myparity = proc_id & 1;
+
     if(num_procs == 1)
         myparity = 3;
 
@@ -113,92 +113,89 @@ int main(int argc, char *argv[])
     volumenp = (double)size * (double)sizenp;
 
     /** Allocate lattice */
-    spin = new int* [sizenp2]; 
+    spin = new int* [sizenp2];
+
     for(int i = 1; i < sizenp1; i++)
-        spin[i] = new int [size]; 
+        spin[i] = new int [size];
+
     spin[0] = new int [size]();
     spin[sizenp1] = new int [size]();
 
     initweight();
 
     /** Pre-OpenMP sanity checks */
-    if(size & 1)
-    {
+    if(size & 1) {
         printf("Error, size must be even for chessboard dependency.\n");
         exit(EXIT_FAILURE);
     }
-    if(sizenp * num_procs != size)
-    {
+
+    if(sizenp * num_procs != size) {
         printf("Error! size has to be multiple of num_procs\n");
         exit(EXIT_FAILURE);
     }
 
-#pragma omp parallel default(shared) 
-{
-    if(NUM_THREADS != omp_get_num_threads())
+#pragma omp parallel default(shared)
     {
-        printf("Thread creation issue.\n  #Threads requested:\t%d"
-                "\n  #Threads spawned:\t%d\n", NUM_THREADS, omp_get_num_threads());
-        exit(EXIT_FAILURE);
-    }
+        if(NUM_THREADS != omp_get_num_threads()) {
+            printf("Thread creation issue.\n  #Threads requested:\t%d"
+                   "\n  #Threads spawned:\t%d\n", NUM_THREADS, omp_get_num_threads());
+            exit(EXIT_FAILURE);
+        }
 
-    int thread_num = omp_get_thread_num();
-    int icall = 0;
-    int	iv[NR_RNDNUM] = {0};
-    int ind_seed = ran_arr[thread_num];
+        int thread_num = omp_get_thread_num();
+        int icall = 0;
+        int	iv[NR_RNDNUM] = {0};
+        int ind_seed = ran_arr[thread_num];
 
 #pragma omp single
-    chunk_width = size / NUM_THREADS;
+        chunk_width = size / NUM_THREADS;
 
-    if(chunk_width * NUM_THREADS != size)
-    {
-        printf("Number of threads (%d) must divide into lattice width (%d)\n", NUM_THREADS, size);
-        exit(EXIT_FAILURE);
-    }
+        if(chunk_width * NUM_THREADS != size) {
+            printf("Number of threads (%d) must divide into lattice width (%d)\n", NUM_THREADS, size);
+            exit(EXIT_FAILURE);
+        }
 
-    /** Initialise rndnum() per thread */
-    rini(ind_seed, iv);
-    init_spin_MPI(&icall, iv); 
+        /** Initialise rndnum() per thread */
+        rini(ind_seed, iv);
+        init_spin_MPI(&icall, iv);
 
 #pragma omp master
-    start = MPI_Wtime();
+        start = MPI_Wtime();
 #pragma omp barrier
 
-    /** Thermalisation */
-    for (int i = 0 ; i < thermalisation ; i++)
-        do_updatetot_MPI(&icall, iv, up_id, dn_id, myparity);
+        /** Thermalisation */
+        for (int i = 0 ; i < thermalisation ; i++)
+            do_updatetot_MPI(&icall, iv, up_id, dn_id, myparity);
 
 
-    /** Measurements */
-    for (int i = 0 ; i < measurements ; i++)
-    {
-        do_updatetot_MPI(&icall, iv, up_id, dn_id, myparity);
-        do_measurements_MPI(i);
+        /** Measurements */
+        for (int i = 0 ; i < measurements ; i++) {
+            do_updatetot_MPI(&icall, iv, up_id, dn_id, myparity);
+            do_measurements_MPI(i);
+        }
     }
-}
 
     /** Reduce per-process observables */
     MPI_Reduce(magn,
-            magntot,
-            measurements,
-            MPI_DOUBLE, 
-            MPI_SUM,   
-            0,
-            MPI_COMM_WORLD
-            );
+               magntot,
+               measurements,
+               MPI_DOUBLE,
+               MPI_SUM,
+               0,
+               MPI_COMM_WORLD
+              );
 
-    MPI_Reduce(ene, 
-            enetot, 
-            measurements, 
-            MPI_DOUBLE, 
-            MPI_SUM, 
-            0,
-            MPI_COMM_WORLD
-            );
+    MPI_Reduce(ene,
+               enetot,
+               measurements,
+               MPI_DOUBLE,
+               MPI_SUM,
+               0,
+               MPI_COMM_WORLD
+              );
 
     /** Calc time and write measurements */
-    if(proc_id == 0)
-    {
+    if(proc_id == 0) {
         finish = MPI_Wtime();
         elapsed = finish - start;
         inv_beta = 1.0 / beta;
@@ -211,8 +208,10 @@ int main(int argc, char *argv[])
     delete[] enetot;
     delete[] magn;
     delete[] magntot;
+
     for(int i = 0; i < sizenp2; i++)
         delete[] spin[i];
+
     delete[] spin;
     MPI_Finalize();
 
@@ -224,16 +223,18 @@ int main(int argc, char *argv[])
 void init_spin_MPI(int* icall, int* iv)
 {
 #pragma omp for schedule(static, chunk_width)
+
     for(int j = 0; j < size; j++)
         for(int i = 1; i <= sizenp; i++)
-            switch (istart)
-            {
+            switch (istart) {
             case 0:
                 spin[i][j] = 1 ;
                 break;
+
             case 1:
                 spin[i][j] = rndnum(icall, iv) < 0.5 ? 1 : -1;
                 break;
+
             default:
                 std::cout << "Unknown initialisation parameter" << std::endl;
                 exit(EXIT_FAILURE);
@@ -250,9 +251,9 @@ void do_measurements_MPI(int k)
     tmp_accum_1 = tmp_accum_2 = 0.;
 
 #pragma omp for schedule(static, chunk_width) reduction(+: tmp_accum_1, tmp_accum_2)
+
     for (int j = 0 ; j < size ; j++ )
-        for (int i = 1 ; i < sizenp1 ; i++)
-        {
+        for (int i = 1 ; i < sizenp1 ; i++) {
             int ifor = i + 1;
             int jfor = (j + 1) % size;
             tmp_accum_1 += spin[i][j] ;
@@ -260,29 +261,31 @@ void do_measurements_MPI(int k)
         }
 
 #pragma omp single nowait
-{
-    magn[k] = fabs(tmp_accum_1) / volumenp ;
-    magn[k] /= num_procs;
-}
-#pragma omp single 
-{
-    ene[k] = tmp_accum_2 / volumenp ;
-    ene[k] /= num_procs;
-}
+    {
+        magn[k] = fabs(tmp_accum_1) / volumenp ;
+        magn[k] /= num_procs;
+    }
+#pragma omp single
+    {
+        ene[k] = tmp_accum_2 / volumenp ;
+        ene[k] /= num_procs;
+    }
 }
 
 /**************************** UPDATE: 2 ****************************/
 
 void do_update_bulk_MPI(int* icall, int* iv)
 {
-#pragma omp for schedule(static, chunk_width) 
+#pragma omp for schedule(static, chunk_width)
+
     for(int j = 0; j < size; j++)
-        for(int i = (j & 1) + 2; i <= sizenp; i+=2)
+        for(int i = (j & 1) + 2; i <= sizenp; i += 2)
             spin[i][j] =  Heatbath(i, j, icall, iv) ;
-    
-#pragma omp for schedule(static, chunk_width) 
+
+#pragma omp for schedule(static, chunk_width)
+
     for(int j = 0; j < size; j++)
-        for(int i = !(j & 1) + 2; i <= sizenp; i+=2)
+        for(int i = !(j & 1) + 2; i <= sizenp; i += 2)
             spin[i][j] =  Heatbath(i, j, icall, iv) ;
 }
 
@@ -299,17 +302,13 @@ void do_update_row1_MPI(int* icall, int* iv)
 void do_updatetot_MPI(int* icall, int* iv, int up_id, int dn_id, int myparity)
 {
 #pragma omp master
-    if(myparity == 0)
-    {
+    if(myparity == 0) {
         MPI_Send(spin[1], size, MPI_INT, dn_id, 10, MPI_COMM_WORLD);
         MPI_Recv(spin[sizenp1], size, MPI_INT, up_id, 10, MPI_COMM_WORLD, &status);
-    }
-    else if (myparity == 1)
-    {
+    } else if (myparity == 1) {
         MPI_Recv(spin[sizenp1], size, MPI_INT, up_id, 10, MPI_COMM_WORLD, &status);
         MPI_Send(spin[1], size, MPI_INT, dn_id, 10, MPI_COMM_WORLD);
-    }
-    else if (myparity == 3)
+    } else if (myparity == 3)
         for (int j = 0; j < size; j++)
             spin[sizenp1][j] = spin[1][j];
 #pragma omp barrier
@@ -317,17 +316,13 @@ void do_updatetot_MPI(int* icall, int* iv, int up_id, int dn_id, int myparity)
     do_update_bulk_MPI(icall, iv);
 
 #pragma omp master
-    if(myparity == 0)
-    {
+    if(myparity == 0) {
         MPI_Send(spin[sizenp], size, MPI_INT, up_id, 11, MPI_COMM_WORLD);
         MPI_Recv(spin[0], size, MPI_INT, dn_id, 11, MPI_COMM_WORLD, &status);
-    }
-    else if (myparity == 1)
-    {
+    } else if (myparity == 1) {
         MPI_Recv(spin[0], size, MPI_INT, dn_id, 11, MPI_COMM_WORLD, &status);
         MPI_Send(spin[sizenp], size, MPI_INT, up_id, 11, MPI_COMM_WORLD);
-    }
-    else if (myparity == 3)
+    } else if (myparity == 3)
         for (int j = 0; j < size; j++)
             spin[0][j] = spin[sizenp][j];
 #pragma omp barrier
@@ -372,15 +367,12 @@ double rndnum(int* icall_o, int* iv)
 
     int icall = *icall_o;
 
-    if (icall == ikeep)
-    {
-        for(int i = 1; i <= ithrow; i++)
-        {
+    if (icall == ikeep) {
+        for(int i = 1; i <= ithrow; i++) {
             ivn = iv[irs + icall] - iv[icall];
             icall++;
 
-            if (ivn < 0)
-            {
+            if (ivn < 0) {
                 iv[icall]++;
                 ivn = ivn + ibase;
             }
@@ -397,8 +389,7 @@ double rndnum(int* icall_o, int* iv)
     ivn = iv[irs + icall] - iv[icall];
     icall++;
 
-    if (ivn < 0)
-    {
+    if (ivn < 0) {
         iv[icall]++;
         ivn = ivn + ibase;
     }
@@ -434,8 +425,7 @@ void rini(int iran, int* iv)
 
     ifac = (ibase - 1) / im;
 
-    for(int i = 0; i < ir; i++)
-    {
+    for(int i = 0; i < ir; i++) {
         jran = (jran * ia + ic) % im;
         iv[i] = ifac * jran;
     }
@@ -451,8 +441,7 @@ void read_input()
     std::cin >> measurements;
     std::cin >> istart;
 
-    if ( (istart != 1) && (istart != 0) )
-    {
+    if ( (istart != 1) && (istart != 0) ) {
         std::cout << "Error: istart can only be either 0 (cold) or 1 (hot)" << std::endl;
         exit(EXIT_FAILURE);
     }
@@ -487,8 +476,7 @@ void write_measures_MPI(double elapsed)
 
 void initweight()
 {
-    for (int i = 0; i < 5; i++)
-    {
+    for (int i = 0; i < 5; i++) {
         int j = 2 * (i - 2);
         weight[i] = 1.0 / (1.0 + exp(2 * j * beta)) ;
     }
