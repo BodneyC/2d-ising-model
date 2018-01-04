@@ -10,12 +10,12 @@ do
     sbatch job-spec-ser.sh
 
     sleep 2
-    QUEUE=`squeue -u 927772 | grep 927772`
+    QUEUE=`squeue -u benjc | grep benjc`
 
     while [[ ! -z $QUEUE ]]
     do
         sleep 2
-        QUEUE=`squeue -u 927772 | grep 927772`
+        QUEUE=`squeue -u benjc | grep benjc`
     done
 done
 
